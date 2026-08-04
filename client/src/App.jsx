@@ -1,5 +1,7 @@
-import React, { useState, createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, createContext, useContext, useEffect } from 'react';
+
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import AdminDashboard from './components/AdminDashboard';
 import {
   FaBoxes,
   FaPlane,
@@ -28,46 +30,111 @@ import {
   FaRupeeSign,
   FaSignOutAlt,
   FaArrowRight,
-  FaAt,
   FaShieldAlt,
-  FaRocket
+  FaRocket,
+  FaTimes,
+  FaClock,
+  FaCheckDouble,
+  FaHistory,
+  FaChartLine,
+  FaSearch,
+  FaFilter,
+  FaBars,
+  FaCog,
+  FaExclamationTriangle,
+  FaUserShield,
+  FaUsers
 } from 'react-icons/fa';
 
-// Global Context for User Auth State
+const API_BASE = "http://localhost:8000/api/v1";
+
+// Helper to simulate JWT Creation and Verification locally when backend API is unavailable
+const createJWT = (payload) => {
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const body = btoa(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + 3600 * 24 }));
+  const signature = btoa("freighthub_jwt_secret_key");
+  return `${header}.${body}.${signature}`;
+};
+
+const parseJWT = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(window.atob(base64));
+  } catch (e) {
+    return null;
+  }
+};
+
+// Seed initial persistent user store for database validation logic
+const initializeDatabase = () => {
+  if (!localStorage.getItem('freight_db_users')) {
+    const initialUsers = [
+      { id: 1, full_name: "Admin User", username: "admin", email: "admin@freighthub.in", password: "password123", role: "admin" },
+      { id: 2, full_name: "Alex Morgan", username: "alex", email: "alex@company.com", password: "password123", role: "user" }
+    ];
+    localStorage.setItem('freight_db_users', JSON.stringify(initialUsers));
+  }
+};
+
+initializeDatabase();
+
 const AuthContext = createContext();
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem('freight_token'));
+  const [user, setUser] = useState(() => {
+    const savedToken = localStorage.getItem('freight_token');
+    return savedToken ? parseJWT(savedToken) : null;
+  });
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
-  const login = (identifier, username) => {
-    const displayName = username || identifier.split('@')[0];
-    setUser({ identifier, name: displayName });
+  const loginSession = (jwtToken) => {
+    const decoded = parseJWT(jwtToken);
+    localStorage.setItem('freight_token', jwtToken);
+    setToken(jwtToken);
+    setUser(decoded);
+    setShowAuthModal(false);
   };
-  const logout = () => setUser(null);
+
+  const logoutSession = () => {
+    localStorage.removeItem('freight_token');
+    setToken(null);
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loginSession, logoutSession, showAuthModal, setShowAuthModal }}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          {/* Admin Panel Secured Route */}
+          <Route
+            path="/admin/*"
+            element={
+              user && user.role === 'admin' ? (
+                <AdminDashboard />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+
+          {/* Standard User Platform Routes */}
           <Route
             path="/*"
             element={
-              <ProtectedRoute>
+              user && user.role === 'admin' ? (
+                <Navigate to="/admin" replace />
+              ) : (
                 <MainLayout />
-              </ProtectedRoute>
+              )
             }
           />
         </Routes>
+        {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       </BrowserRouter>
     </AuthContext.Provider>
   );
-}
-
-// Protected Route Guard
-function ProtectedRoute({ children }) {
-  const { user } = useContext(AuthContext);
-  return user ? children : <Navigate to="/login" replace />;
 }
 
 // ==========================================
@@ -76,17 +143,17 @@ function ProtectedRoute({ children }) {
 function BrandLogo() {
   return (
     <Link to="/" className="flex items-center gap-3 group">
-      <div className="relative p-3 bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 rounded-2xl text-white shadow-lg shadow-blue-500/30 group-hover:scale-105 transition-transform duration-300">
-        <FaRocket className="text-2xl transform -rotate-12" />
-        <span className="absolute -bottom-1 -right-1 p-1 bg-amber-400 text-slate-900 rounded-full text-[10px]">
+      <div className="relative p-2.5 bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 rounded-2xl text-white shadow-lg shadow-blue-500/30 group-hover:scale-105 transition-transform duration-300">
+        <FaRocket className="text-xl transform -rotate-12" />
+        <span className="absolute -bottom-1 -right-1 p-0.5 bg-amber-400 text-slate-900 rounded-full text-[9px]">
           <FaBoxes />
         </span>
       </div>
       <div>
-        <span className="text-2xl font-black text-slate-900 block leading-none tracking-tight">
+        <span className="text-xl font-black text-slate-900 block leading-none tracking-tight">
           FREIGHT<span className="text-blue-600">HUB</span>
         </span>
-        <span className="text-xs font-bold text-slate-500 uppercase block tracking-wider mt-1">
+        <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wider mt-0.5">
           Smart Logistics Engine
         </span>
       </div>
@@ -98,26 +165,23 @@ function BrandLogo() {
 // MAIN PLATFORM LAYOUT
 // ==========================================
 function MainLayout() {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logoutSession, setShowAuthModal } = useContext(AuthContext);
   const location = useLocation();
 
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'About', path: '/about' },
-    { name: 'Services', path: '/calculator' },
-    { name: 'Special Offers', path: '/offers' },
+    { name: 'Calculator & Services', path: '/calculator' },
+    { name: 'Offers', path: '/offers' },
     { name: 'Contact', path: '/contact' }
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased text-base">
-      {/* Top Navbar */}
-      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 shadow-sm px-6 py-4">
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          
           <BrandLogo />
 
-          {/* Navigation Links with larger text */}
           <nav className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => {
               const active = location.pathname === link.path;
@@ -125,10 +189,8 @@ function MainLayout() {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`text-base font-bold transition-all duration-200 relative py-1 ${
-                    active
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-slate-700 hover:text-blue-600'
+                  className={`text-sm font-bold transition-all duration-200 relative py-1 ${
+                    active ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-700 hover:text-blue-600'
                   }`}
                 >
                   {link.name}
@@ -137,24 +199,32 @@ function MainLayout() {
             })}
           </nav>
 
-          {/* User Profile Pill */}
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl text-sm font-bold text-blue-900 shadow-sm">
-              <FaUser className="text-blue-600" />
-              <span>@{user.name}</span>
-            </div>
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-red-600 px-4 py-2 rounded-xl border border-slate-200 hover:border-red-200 transition-all bg-white shadow-sm"
-            >
-              <FaSignOutAlt /> Logout
-            </button>
+            {user ? (
+              <>
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3.5 py-1.5 rounded-xl text-xs font-bold text-blue-900 shadow-sm">
+                  <FaUser className="text-blue-600" />
+                  <span>@{user.username || user.name}</span>
+                </div>
+                <button
+                  onClick={logoutSession}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-red-600 px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-red-200 transition-all bg-white shadow-sm"
+                >
+                  <FaSignOutAlt /> Logout
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all"
+              >
+                <FaSignInAlt /> Login / Register
+              </button>
+            )}
           </div>
-
         </div>
       </header>
 
-      {/* Dynamic Page Views */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10">
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -165,7 +235,6 @@ function MainLayout() {
         </Routes>
       </main>
 
-      {/* Sleek Minimal Footer */}
       <footer className="bg-slate-900 text-slate-400 py-6 px-6 mt-auto border-t border-slate-800">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 text-sm font-medium">
           <div className="flex items-center gap-2 text-white font-bold text-base">
@@ -183,72 +252,175 @@ function MainLayout() {
 }
 
 // ==========================================
-// 1. ANIMATED LOGIN / REGISTER GATEWAY
+// JWT AUTH MODAL (WITH DATABASE VALIDATION & REDIRECT)
 // ==========================================
-function LoginPage() {
+function AuthModal({ onClose }) {
+  const [role, setRole] = useState('user');
   const [isRegister, setIsRegister] = useState(false);
+
   const [identifier, setIdentifier] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   
-  const { login } = useContext(AuthContext);
+  const { loginSession } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      // 1. Backend REST API attempt
+      const endpoint = isRegister ? '/auth/register' : '/auth/login';
+      const payload = isRegister
+        ? { full_name: fullName, username, email, password, role }
+        : { identifier, password, role };
+
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        loginSession(data.access_token);
+        if (role === 'admin') navigate('/admin');
+        else navigate('/calculator');
+        return;
+      }
+    } catch (err) {
+      // Fallback to local database authentication
+    }
+
+    // 2. Client-side Local Database Validation
+    const usersDb = JSON.parse(localStorage.getItem('freight_db_users') || "[]");
+
     if (isRegister) {
-      if (email && username && password) {
-        login(email, username);
-        navigate('/');
+      const existingUser = usersDb.find(
+        (u) => u.email.toLowerCase() === email.toLowerCase() || u.username.toLowerCase() === username.toLowerCase()
+      );
+
+      if (existingUser) {
+        setErrorMsg('User with this email or username already exists. Please login instead.');
+        return;
       }
+
+      const newUser = {
+        id: Date.now(),
+        full_name: fullName,
+        username,
+        email,
+        password,
+        role
+      };
+
+      usersDb.push(newUser);
+      localStorage.setItem('freight_db_users', JSON.stringify(usersDb));
+
+      const jwtToken = createJWT({
+        id: newUser.id,
+        name: newUser.full_name,
+        username: newUser.username,
+        email: newUser.email,
+        role: newUser.role
+      });
+
+      setSuccessMsg("Account created! Redirecting to freight calculator...");
+      setTimeout(() => {
+        loginSession(jwtToken);
+        if (newUser.role === 'admin') navigate('/admin');
+        else navigate('/calculator');
+      }, 1000);
+
     } else {
-      if (identifier && password) {
-        login(identifier, identifier);
-        navigate('/');
+      // LOGIN VALIDATION AGAINST DATABASE
+      const match = usersDb.find(
+        (u) =>
+          (u.email.toLowerCase() === identifier.toLowerCase() || u.username.toLowerCase() === identifier.toLowerCase()) &&
+          u.password === password &&
+          u.role === role
+      );
+
+      if (!match) {
+        setErrorMsg(`Invalid ${role} credentials. If you don't have an account, please register first.`);
+        return;
       }
+
+      const jwtToken = createJWT({
+        id: match.id,
+        name: match.full_name,
+        username: match.username,
+        email: match.email,
+        role: match.role
+      });
+
+      setSuccessMsg("Authenticated! Redirecting to calculator...");
+      setTimeout(() => {
+        loginSession(jwtToken);
+        if (match.role === 'admin') navigate('/admin');
+        else navigate('/calculator');
+      }, 800);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="max-w-4xl w-full bg-white/95 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 relative z-10">
-        
-        {/* Left Side */}
-        <div className="md:col-span-5 bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-800 p-8 text-white flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-3 p-3 bg-white/20 backdrop-blur-md rounded-2xl border border-white/30">
-              <FaRocket className="text-3xl text-white" />
-            </div>
-            
-            <div>
-              <h1 className="text-3xl font-black text-white">FREIGHT HUB</h1>
-              <p className="text-sm font-semibold text-blue-100">Logistics Calculations Portal</p>
-            </div>
-          </div>
+    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full"
+        >
+          <FaTimes />
+        </button>
 
-          <div className="my-8 bg-white/10 p-4 rounded-2xl border border-white/10 text-sm">
-            Instant freight rate estimates, distance matrix queries, and tariff calculations.
-          </div>
-
-          <div className="text-xs text-blue-200 border-t border-white/15 pt-4">
-            &copy; FreightHub Enterprise Gateway
-          </div>
-        </div>
-
-        {/* Right Form */}
-        <div className="md:col-span-7 p-8 md:p-10 bg-white flex flex-col justify-center">
-          <div className="space-y-2 mb-6">
-            <h2 className="text-3xl font-black text-slate-900">
-              {isRegister ? 'Create Account' : 'Welcome'}
+        <div className="p-8 space-y-6">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-black text-slate-900">
+              {isRegister ? 'Create Account' : 'Welcome Back'}
             </h2>
-            <p className="text-sm font-medium text-slate-500">
-              {isRegister
-                ? 'Register your details to unlock freight calculation tools.'
-                : 'Enter your Email or Username to access the platform.'}
+            <p className="text-xs font-semibold text-slate-500">
+              {isRegister ? 'Register your account to unlock instant calculation' : 'Sign in using your validated credentials'}
             </p>
           </div>
+
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setRole('user')}
+              className={`py-2 text-xs font-extrabold rounded-xl transition-all ${
+                role === 'user' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'
+              }`}
+            >
+              Customer User
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('admin')}
+              className={`py-2 text-xs font-extrabold rounded-xl transition-all ${
+                role === 'admin' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-600'
+              }`}
+            >
+              Administrator
+            </button>
+          </div>
+
+          {errorMsg && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold flex items-center gap-2">
+              <FaExclamationTriangle /> {errorMsg}
+            </div>
+          )}
+          {successMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-xl text-xs font-bold flex items-center gap-2">
+              <FaCheckCircle /> {successMsg}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4 text-sm">
             {isRegister ? (
@@ -260,55 +432,44 @@ function LoginPage() {
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base text-slate-800 focus:outline-none focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-blue-600 text-sm font-semibold"
                     placeholder="Alex Morgan"
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Username</label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-3.5 text-slate-400"><FaUser /></span>
-                    <input
-                      type="text"
-                      required
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 pl-10 text-base text-slate-800 focus:outline-none focus:border-blue-600"
-                      placeholder="alex_morgan"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-blue-600 text-sm font-semibold"
+                    placeholder="alex_morgan"
+                  />
                 </div>
-
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Email Address</label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-3.5 text-slate-400"><FaAt /></span>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 pl-10 text-base text-slate-800 focus:outline-none focus:border-blue-600"
-                      placeholder="alex@company.com"
-                    />
-                  </div>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-blue-600 text-sm font-semibold"
+                    placeholder="alex@company.com"
+                  />
                 </div>
               </>
             ) : (
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Email or Username</label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3.5 text-slate-400"><FaUser /></span>
-                  <input
-                    type="text"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 pl-10 text-base text-slate-800 focus:outline-none focus:border-blue-600"
-                    placeholder="Enter email or username"
-                  />
-                </div>
+                <input
+                  type="text"
+                  required
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-blue-600 text-sm font-semibold"
+                  placeholder="Enter email or username (e.g. alex)"
+                />
               </div>
             )}
 
@@ -319,243 +480,42 @@ function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-base text-slate-800 focus:outline-none focus:border-blue-600"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-blue-600 text-sm font-semibold"
                 placeholder="••••••••"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-base rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4"
+              className={`w-full py-3.5 text-white font-extrabold text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-2 ${
+                role === 'admin' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {isRegister ? <FaUserPlus /> : <FaSignInAlt />}
-              <span>{isRegister ? 'Register Account' : 'Sign In Now'}</span>
+              <span>{isRegister ? 'Register Account' : `Sign In as ${role === 'admin' ? 'Admin' : 'User'}`}</span>
             </button>
           </form>
 
-          <div className="text-center pt-6 mt-6 border-t border-slate-100">
+          <div className="text-center border-t border-slate-100 pt-4">
             <button
-              onClick={() => setIsRegister(!isRegister)}
-              className="text-sm text-blue-600 hover:text-blue-800 font-bold"
+              type="button"
+              onClick={() => { setIsRegister(!isRegister); setErrorMsg(''); setSuccessMsg(''); }}
+              className="text-xs text-blue-600 hover:text-blue-800 font-bold"
             >
-              {isRegister ? 'Already registered? Click here to Sign In' : "Need an account? Register with username & email"}
+              {isRegister ? 'Already registered? Click to Sign In' : "Don't have an account yet? Register here"}
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );
 }
 
 // ==========================================
-// 2. HOME PAGE VIEW
-// ==========================================
-function HomePage() {
-  return (
-    <div className="space-y-16 py-4">
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-        
-        <div className="lg:col-span-5 flex justify-start">
-          <div className="relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-slate-200 bg-slate-900 group">
-            <img
-              src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80"
-              alt="Logistics Warehouse"
-              className="w-full h-80 object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
-            />
-            <div className="p-6 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent text-white space-y-1">
-              <span className="text-xs font-black uppercase text-blue-400 tracking-wider">
-                ⚡ REAL-TIME ENGINE
-              </span>
-              <p className="text-2xl font-black">Global Freight Rates</p>
-              <p className="text-sm text-slate-300">Multi-Modal Distance & Tariff Calculations</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-7 space-y-6">
-          <span className="px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider inline-block">
-            🚀 Freight Automation Platform
-          </span>
-          <h1 className="text-4xl sm:text-5xl font-black text-slate-900 leading-tight">
-            Freight Rate & Distance Calculator
-          </h1>
-
-          <p className="text-slate-600 text-lg leading-relaxed font-normal">
-            Calculate accurate freight tariffs in <strong className="text-slate-900 font-bold">Indian Rupee (₹)</strong> based on actual route distances, transport modes, and cargo weights.
-          </p>
-
-          <div className="flex flex-wrap gap-4 pt-2">
-            <Link
-              to="/calculator"
-              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-base font-bold transition-all shadow-lg flex items-center gap-2"
-            >
-              <FaCalculator /> Calculate Freight Quote
-            </Link>
-            <Link
-              to="/about"
-              className="px-8 py-4 bg-white hover:bg-slate-100 text-slate-800 rounded-xl text-base font-bold transition-all border border-slate-300 flex items-center gap-2 shadow-sm"
-            >
-              Learn More <FaArrowRight className="text-xs" />
-            </Link>
-          </div>
-        </div>
-
-      </section>
-
-      {/* Feature Section */}
-      <section className="py-8 space-y-8 border-t border-slate-200">
-        <div className="text-center space-y-2">
-          <span className="text-blue-600 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5">
-            <FaInfoCircle /> ABOUT THE SYSTEM
-          </span>
-          <h2 className="text-3xl font-black text-slate-900">
-            Trusted Freight Calculation Engine
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-blue-400 transition-all">
-            <FaBoxes className="text-3xl text-blue-600" />
-            <h3 className="text-xl font-bold text-slate-900">Tariff Engine</h3>
-            <p className="text-sm text-slate-600">Calculates shipping rates dynamically based on cargo weight and mode.</p>
-          </div>
-
-          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-blue-400 transition-all">
-            <FaGlobe className="text-3xl text-blue-600" />
-            <h3 className="text-xl font-bold text-slate-900">Distance Matrix</h3>
-            <p className="text-sm text-slate-600">Automatic route length calculation between major hubs.</p>
-          </div>
-
-          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-emerald-400 transition-all">
-            <FaRupeeSign className="text-3xl text-emerald-600" />
-            <h3 className="text-xl font-bold text-slate-900">INR Standard</h3>
-            <p className="text-sm text-slate-600">All cost outputs computed in Indian Rupee (₹) with tax breakdowns.</p>
-          </div>
-
-          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-purple-400 transition-all">
-            <FaCheckCircle className="text-3xl text-purple-600" />
-            <h3 className="text-xl font-bold text-slate-900">Instant Quotes</h3>
-            <p className="text-sm text-slate-600">Immediate itemized cost output without delays.</p>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// ==========================================
-// 3. HIGH VISIBILITY ABOUT PAGE (REFERENCE MATCHED)
-// ==========================================
-function AboutPage() {
-  return (
-    <div className="space-y-10 py-2">
-      {/* High Visibility Clear Image Hero Banner */}
-      <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-600 rounded-3xl overflow-hidden shadow-xl border border-slate-200 p-8 md:p-12 text-white grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-        
-        <div className="md:col-span-7 space-y-4">
-          <span className="px-3.5 py-1.5 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider inline-block">
-            Smart & Reliable Freight Hub
-          </span>
-          <h1 className="text-3xl md:text-5xl font-black leading-tight text-white">
-            Make your freight calculations simple with FreightHub
-          </h1>
-          <p className="text-base text-emerald-50 font-medium leading-relaxed">
-            Choose and calculate optimal shipping rates across air, ocean, road, and rail with transparent pricing, instant distance matrices, and zero hidden charges.
-          </p>
-          <div className="pt-2">
-            <Link
-              to="/calculator"
-              className="inline-flex items-center gap-2 px-8 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-sm transition-all shadow-lg"
-            >
-              Calculate Freight Now <FaArrowRight />
-            </Link>
-          </div>
-        </div>
-
-        <div className="md:col-span-5 flex justify-center">
-          <img
-            src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80"
-            alt="Logistics Fleet"
-            className="rounded-2xl shadow-2xl border-4 border-white/30 object-cover max-h-64 w-full"
-          />
-        </div>
-
-      </div>
-
-      {/* Our Story & Mission Section */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-8 md:p-10 shadow-sm space-y-8">
-        <div className="space-y-4">
-          <h2 className="text-3xl font-black text-slate-900">
-            Our story & mission
-          </h2>
-          <div className="space-y-3 text-slate-700 text-base leading-relaxed font-normal">
-            <p>
-              FreightHub began with a clear mission: connect commercial shippers and enterprise supply teams with automated, accurate freight tariff calculations. Today we deliver a real-time computation system covering global routes, cargo classes, and multi-modal transit options — all with transparent pricing in Indian Rupee (₹).
-            </p>
-            <p>
-              We prioritize transparency, route distance accuracy, and clear cost breakdowns to make logistics simple, affordable, and dependable.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4 pt-2 border-t border-slate-100">
-          <h3 className="text-xl font-extrabold text-slate-900">
-            What makes us different
-          </h3>
-          <ul className="space-y-3 text-base font-semibold text-slate-700">
-            <li className="flex items-center gap-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
-              <span>Hub-to-hub real-time distance matrix computation</span>
-            </li>
-            <li className="flex items-center gap-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
-              <span>Multi-modal carrier flexibility (Air, Ocean, Road, Rail)</span>
-            </li>
-            <li className="flex items-center gap-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
-              <span>Clear fuel surcharge & customs handling breakdowns in ₹</span>
-            </li>
-          </ul>
-
-          <div className="flex flex-wrap gap-4 pt-4">
-            <Link
-              to="/calculator"
-              className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-extrabold transition-all shadow-sm"
-            >
-              Explore Calculator
-            </Link>
-            <Link
-              to="/"
-              className="px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-sm font-extrabold transition-all border border-slate-300"
-            >
-              Back to Home
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-slate-100 border border-slate-200 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-3xl shadow-md shrink-0">
-          <FaShieldAlt />
-        </div>
-        <div className="space-y-1 text-center md:text-left text-base">
-          <p className="text-slate-900 font-extrabold">
-            FreightHub is your trusted neighborhood logistics calculation engine bringing instant, high-precision distance and tariff metrics to your fingertips.
-          </p>
-          <p className="text-sm text-slate-600">
-            Our mission is to make freight planning simple, affordable, and completely transparent.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 4. CALCULATOR PAGE VIEW
+// CALCULATOR PAGE VIEW
 // ==========================================
 function CalculatorPage() {
+  const { user, setShowAuthModal } = useContext(AuthContext);
   const [quoteData, setQuoteData] = useState({
     origin: 'Chennai, India (MAA)',
     destination: 'Mumbai, India (BOM)',
@@ -565,6 +525,7 @@ function CalculatorPage() {
   });
 
   const [generatedQuote, setGeneratedQuote] = useState(null);
+  const [bookedStatus, setBookedStatus] = useState(false);
 
   const routeDistances = {
     'Chennai, India (MAA)': {
@@ -582,6 +543,13 @@ function CalculatorPage() {
 
   const handleGenerateQuote = (e) => {
     e.preventDefault();
+
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    setBookedStatus(false);
     const modeRates = { air: 180, ocean: 45, road: 70, rail: 50 };
     const cargoMultipliers = { general: 1.0, electronics: 1.3, hazardous: 1.75, perishable: 1.4 };
 
@@ -591,12 +559,17 @@ function CalculatorPage() {
     const total = rawCost + fuelSurcharge + customs;
 
     setGeneratedQuote({
+      rawTotalNum: total,
       baseCost: Math.round(rawCost).toLocaleString('en-IN'),
       fuelSurcharge: Math.round(fuelSurcharge).toLocaleString('en-IN'),
       customs: customs.toLocaleString('en-IN'),
       finalTotal: Math.round(total).toLocaleString('en-IN'),
       transitDays: quoteData.shipmentMode === 'air' ? '1-3 Days' : '5-7 Days'
     });
+  };
+
+  const handleBookShipment = async () => {
+    setBookedStatus(true);
   };
 
   return (
@@ -612,7 +585,6 @@ function CalculatorPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <form onSubmit={handleGenerateQuote} className="lg:col-span-2 bg-white border border-slate-200 p-8 rounded-3xl space-y-6 shadow-sm">
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-700 mb-2">
@@ -767,9 +739,20 @@ function CalculatorPage() {
           </div>
 
           {generatedQuote && (
-            <button className="w-full mt-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-base font-extrabold transition-all flex items-center justify-center gap-2 shadow-md">
-              <FaCheckCircle /> Confirm & Book Shipment
-            </button>
+            <div className="mt-6 space-y-3">
+              {bookedStatus ? (
+                <div className="p-4 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl text-sm font-extrabold flex items-center gap-2 justify-center">
+                  <FaCheckDouble className="text-xl" /> Shipment Dispatched to Operations Panel!
+                </div>
+              ) : (
+                <button
+                  onClick={handleBookShipment}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-base font-extrabold transition-all flex items-center justify-center gap-2 shadow-md"
+                >
+                  <FaCheckCircle /> Confirm & Book Shipment
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -778,7 +761,197 @@ function CalculatorPage() {
 }
 
 // ==========================================
-// 5. OFFERS PAGE VIEW
+// HOME PAGE VIEW
+// ==========================================
+function HomePage() {
+  const { setShowAuthModal, user } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  const handleStartCalc = () => {
+    if (!user) {
+      setShowAuthModal(true);
+    } else {
+      navigate('/calculator');
+    }
+  };
+
+  return (
+    <div className="space-y-16 py-4">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        <div className="lg:col-span-5 flex justify-start">
+          <div className="relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-slate-200 bg-slate-900 group">
+            <img
+              src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80"
+              alt="Logistics Warehouse"
+              className="w-full h-80 object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
+            />
+            <div className="p-6 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent text-white space-y-1">
+              <span className="text-xs font-black uppercase text-blue-400 tracking-wider">
+                ⚡ REAL-TIME ENGINE
+              </span>
+              <p className="text-2xl font-black">Global Freight Rates</p>
+              <p className="text-sm text-slate-300">Multi-Modal Distance & Tariff Calculations</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 space-y-6">
+          <span className="px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-xs font-black uppercase tracking-wider inline-block">
+            🚀 Freight Automation Platform
+          </span>
+          <h1 className="text-4xl sm:text-5xl font-black text-slate-900 leading-tight">
+            Freight Rate & Distance Calculator
+          </h1>
+
+          <p className="text-slate-600 text-lg leading-relaxed font-normal">
+            Calculate accurate freight tariffs in <strong className="text-slate-900 font-bold">Indian Rupee (₹)</strong> based on actual route distances, transport modes, and cargo weights.
+          </p>
+
+          <div className="flex flex-wrap gap-4 pt-2">
+            <button
+              onClick={handleStartCalc}
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-base font-bold transition-all shadow-lg flex items-center gap-2"
+            >
+              <FaCalculator /> Calculate Freight Quote
+            </button>
+            <Link
+              to="/about"
+              className="px-8 py-4 bg-white hover:bg-slate-100 text-slate-800 rounded-xl text-base font-bold transition-all border border-slate-300 flex items-center gap-2 shadow-sm"
+            >
+              Learn More <FaArrowRight className="text-xs" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-8 space-y-8 border-t border-slate-200">
+        <div className="text-center space-y-2">
+          <span className="text-blue-600 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5">
+            <FaInfoCircle /> ABOUT THE SYSTEM
+          </span>
+          <h2 className="text-3xl font-black text-slate-900">
+            Trusted Freight Calculation Engine
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-blue-400 transition-all">
+            <FaBoxes className="text-3xl text-blue-600" />
+            <h3 className="text-xl font-bold text-slate-900">Tariff Engine</h3>
+            <p className="text-sm text-slate-600">Calculates shipping rates dynamically based on cargo weight and mode.</p>
+          </div>
+
+          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-blue-400 transition-all">
+            <FaGlobe className="text-3xl text-blue-600" />
+            <h3 className="text-xl font-bold text-slate-900">Distance Matrix</h3>
+            <p className="text-sm text-slate-600">Automatic route length calculation between major hubs.</p>
+          </div>
+
+          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-emerald-400 transition-all">
+            <FaRupeeSign className="text-3xl text-emerald-600" />
+            <h3 className="text-xl font-bold text-slate-900">INR Standard</h3>
+            <p className="text-sm text-slate-600">All cost outputs computed in Indian Rupee (₹) with tax breakdowns.</p>
+          </div>
+
+          <div className="p-6 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm hover:border-purple-400 transition-all">
+            <FaCheckCircle className="text-3xl text-purple-600" />
+            <h3 className="text-xl font-bold text-slate-900">Instant Quotes</h3>
+            <p className="text-sm text-slate-600">Immediate itemized cost output without delays.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ==========================================
+// ABOUT PAGE VIEW
+// ==========================================
+function AboutPage() {
+  return (
+    <div className="space-y-10 py-2">
+      <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-600 rounded-3xl overflow-hidden shadow-xl border border-slate-200 p-8 md:p-12 text-white grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+        <div className="md:col-span-7 space-y-4">
+          <span className="px-3.5 py-1.5 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider inline-block">
+            Smart & Reliable Freight Hub
+          </span>
+          <h1 className="text-3xl md:text-5xl font-black leading-tight text-white">
+            Make your freight calculations simple with FreightHub
+          </h1>
+          <p className="text-base text-emerald-50 font-medium leading-relaxed">
+            Choose and calculate optimal shipping rates across air, ocean, road, and rail with transparent pricing, instant distance matrices, and zero hidden charges.
+          </p>
+          <div className="pt-2">
+            <Link
+              to="/calculator"
+              className="inline-flex items-center gap-2 px-8 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-sm transition-all shadow-lg"
+            >
+              Calculate Freight Now <FaArrowRight />
+            </Link>
+          </div>
+        </div>
+
+        <div className="md:col-span-5 flex justify-center">
+          <img
+            src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80"
+            alt="Logistics Fleet"
+            className="rounded-2xl shadow-2xl border-4 border-white/30 object-cover max-h-64 w-full"
+          />
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-3xl p-8 md:p-10 shadow-sm space-y-8">
+        <div className="space-y-4">
+          <h2 className="text-3xl font-black text-slate-900">Our story & mission</h2>
+          <div className="space-y-3 text-slate-700 text-base leading-relaxed font-normal">
+            <p>
+              FreightHub began with a clear mission: connect commercial shippers and enterprise supply teams with automated, accurate freight tariff calculations. Today we deliver a real-time computation system covering global routes, cargo classes, and multi-modal transit options — all with transparent pricing in Indian Rupee (₹).
+            </p>
+            <p>
+              We prioritize transparency, route distance accuracy, and clear cost breakdowns to make logistics simple, affordable, and dependable.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-2 border-t border-slate-100">
+          <h3 className="text-xl font-extrabold text-slate-900">What makes us different</h3>
+          <ul className="space-y-3 text-base font-semibold text-slate-700">
+            <li className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
+              <span>Hub-to-hub real-time distance matrix computation</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
+              <span>Multi-modal carrier flexibility (Air, Ocean, Road, Rail)</span>
+            </li>
+            <li className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
+              <span>Clear fuel surcharge & customs handling breakdowns in ₹</span>
+            </li>
+          </ul>
+
+          <div className="flex flex-wrap gap-4 pt-4">
+            <Link
+              to="/calculator"
+              className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-extrabold transition-all shadow-sm"
+            >
+              Explore Calculator
+            </Link>
+            <Link
+              to="/"
+              className="px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-sm font-extrabold transition-all border border-slate-300"
+            >
+              Back to Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// OFFERS PAGE VIEW
 // ==========================================
 function OffersPage() {
   const offers = [
@@ -814,9 +987,7 @@ function OffersPage() {
         <span className="text-amber-600 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
           <FaPercent /> PROMOTIONS
         </span>
-        <h2 className="text-3xl font-black text-slate-900">
-          Active Freight Discounts
-        </h2>
+        <h2 className="text-3xl font-black text-slate-900">Active Freight Discounts</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -859,7 +1030,7 @@ function OffersPage() {
 }
 
 // ==========================================
-// 6. CONTACT PAGE VIEW
+// CONTACT PAGE VIEW
 // ==========================================
 function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -956,3 +1127,4 @@ function ContactPage() {
     </div>
   );
 }
+
