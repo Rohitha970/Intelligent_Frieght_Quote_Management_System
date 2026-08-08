@@ -68,7 +68,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'backend.freight_project.wsgi.application'
+WSGI_APPLICATION = 'freight_project.wsgi.application'
 
 DATABASES = {
     'default': {
