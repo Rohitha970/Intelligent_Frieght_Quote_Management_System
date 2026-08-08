@@ -4,7 +4,8 @@ from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = config('SECRET_KEY', default='freighthub_jwt_secret_key_2026')
+
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-key-for-dev-12345')
 
 DEBUG = config('DEBUG', default=True, cast=bool)
 
