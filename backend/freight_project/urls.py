@@ -5,6 +5,7 @@ def home(request):
     return HttpResponse("API Server is Live and Running! 🚀")
 urlpatterns = [
      path('', home, name='home'),
+    path('favicon.ico', lambda request: HttpResponse(status=204)), 
     
     path('admin/', admin.site.urls),
     
