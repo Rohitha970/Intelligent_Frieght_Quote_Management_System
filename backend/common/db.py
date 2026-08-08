@@ -1,5 +1,9 @@
-from pymongo import MongoClient
-from django.conf import settings
+from django.db import connection
 
-client = MongoClient(settings.MONGO_URI)
-db = client[settings.MONGO_DB_NAME]
+def execute_custom_query(query, params=None):
+    """Helper method for running raw queries across modules if needed."""
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        if query.strip().lower().startswith('select'):
+            return cursor.fetchall()
+        return cursor.rowcount

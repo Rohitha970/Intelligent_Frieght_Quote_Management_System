@@ -1,0 +1,1 @@
+web: gunicorn backend.freight_project.wsgi:application

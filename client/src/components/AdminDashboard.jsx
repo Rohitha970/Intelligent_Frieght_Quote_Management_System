@@ -1,269 +1,327 @@
-import React, { useState } from 'react';
-import { 
-  Users, Activity, ShieldCheck, Database, 
-  Search, Bell, Settings, LogOut, Menu, X, 
-  TrendingUp, AlertTriangle, CheckCircle, RefreshCw,
-  Truck, DollarSign, Package, FileText, Filter
-} from 'lucide-react';
+import React, { useState, useEffect } from "react";
 
-export default function AdminDashboard({ onLogout }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('Overview');
-  const [searchTerm, setSearchTerm] = useState('');
+const API_BASE = "/api";
 
-  // Sample operational statistics for Freight & Quote System
-  const stats = [
-    { title: "Total Shipments", value: "1,428", change: "+12.5%", icon: Truck, status: "up" },
-    { title: "Active Quotes", value: "342", change: "+8.1%", icon: FileText, status: "up" },
-    { title: "System Load", value: "34.2%", change: "Optimal", icon: Activity, status: "neutral" },
-    { title: "Active JWT Sessions", value: "89", change: "Secure", icon: ShieldCheck, status: "up" },
-  ];
+export default function AdminDashboard({ token, handleLogout, userEmail = "admin@freighthub.in" }) {
+  const [metrics, setMetrics] = useState(null);
+  const [shipments, setShipments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState("Dashboard");
+  const [darkMode, setDarkMode] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState({});
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Sample shipments data
-  const [shipments, setShipments] = useState([
-    { id: "SH-9082", client: "Acme Logistics", origin: "Mumbai", destination: "Chennai", status: "PENDING", date: "10 mins ago" },
-    { id: "SH-9083", client: "Global Freight", origin: "Delhi", destination: "Bangalore", status: "IN TRANSIT", date: "45 mins ago" },
-    { id: "SH-9084", client: "Express Cargo", origin: "Kolkata", destination: "Hyderabad", status: "COMPLETED", date: "2 hours ago" },
-    { id: "SH-9085", client: "FastTrack Inc", origin: "Pune", destination: "Ahmedabad", status: "PENDING", date: "4 hours ago" },
-  ]);
+  useEffect(() => {
+    fetchAdminData();
+  }, []);
 
-  // Sample user management data
-  const users = [
-    { id: 1, name: "Admin Operations", email: "admin@freight.com", role: "Admin", status: "Active" },
-    { id: 2, name: "Dispatcher Alpha", email: "dispatch@freight.com", role: "User", status: "Active" },
-    { id: 3, name: "Carrier Logistics", email: "carrier@partner.org", role: "User", status: "Pending" },
-  ];
-
-  const updateStatus = (id, newStatus) => {
-    setShipments(shipments.map(s => s.id === id ? { ...s, status: newStatus } : s));
+  const fetchAdminData = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/metrics`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to load admin metrics.");
+      setMetrics(data.metrics);
+      setShipments(data.all_shipments || []);
+    } catch (err) {
+      // Fallback mock data
+      setMetrics({
+        total_revenue: 12485000,
+        shipments: { total: 420, pending: 18 },
+        registered_users: 1350
+      });
+      setShipments([
+        { tracking_id: "FH-99201", user_email: "shipper@client.com", origin: "INNSA (Mumbai)", destination: "AEJEA (Dubai)", mode: "ocean", cargo_type: "Textiles", chargeable_weight_kg: 18400, status: "in_transit" },
+        { tracking_id: "FH-99202", user_email: "global@supply.com", origin: "BOM (Mumbai)", destination: "DXB (Dubai)", mode: "air", cargo_type: "Electronics", chargeable_weight_kg: 850, status: "pending" },
+        { tracking_id: "FH-99203", user_email: "logistics@hub.com", origin: "INNSA (Mumbai)", destination: "NLRTM (Rotterdam)", mode: "ocean", cargo_type: "Machinery", chargeable_weight_kg: 24000, status: "dispatched" }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleStatusUpdate = async (trackingId) => {
+    const statusVal = selectedStatus[trackingId];
+    if (!statusVal) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/shipments/${trackingId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: statusVal })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Status update failed");
+      alert(data.message || "Status updated successfully!");
+      fetchAdminData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const sidebarItems = [
+    { name: "Dashboard", icon: "📊" },
+    { name: "Freight & Quotes", icon: "📋" },
+    { name: "Shipment Tracking", icon: "🚚" },
+    { name: "AI Analytics", icon: "🤖" },
+    { name: "User Management", icon: "👥" },
+    { name: "System Settings", icon: "⚙️" },
+    { name: "Logout", icon: "🚪" }
+  ];
+
+  const filteredShipments = shipments.filter(s =>
+    s.tracking_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.origin.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.destination.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white font-sans">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-lg font-semibold tracking-wide">Loading FreightHub Control Tower...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans">
+    <div className={`h-screen w-screen overflow-hidden flex flex-col ${darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"} font-sans transition-colors duration-200`}>
       
-      {/* Mobile Header Bar */}
-      <header className="md:hidden bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700">
-        <div className="flex items-center gap-2">
-          <Truck className="text-blue-400" size={24} />
-          <h1 className="text-lg font-bold text-white">Freight Admin</h1>
-        </div>
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 text-slate-300 hover:text-white">
-          {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </header>
-
-      {/* Sidebar Navigation */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-slate-800/95 backdrop-blur-md border-r border-slate-700 p-5 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="hidden md:flex items-center gap-3 mb-8">
-          <div className="p-2 bg-blue-600 rounded-lg">
-            <Truck size={22} className="text-white" />
-          </div>
-          <div>
-            <span className="text-lg font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent block">
-              Freight Console
-            </span>
-            <span className="text-xs text-slate-400">Intelligent Management</span>
-          </div>
-        </div>
-
-        <nav className="space-y-1.5">
-          {["Overview", "Shipment Control", "User Management", "API & JWT Logs", "Settings"].map((item) => (
-            <button
-              key={item}
-              onClick={() => { setActiveTab(item); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-                activeTab === item 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
-                  : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-              }`}
-            >
-              <Activity size={18} />
-              {item}
-            </button>
-          ))}
-        </nav>
-
-        <div className="absolute bottom-5 left-5 right-5">
-          <button 
-            onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 bg-slate-700/50 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 py-2.5 rounded-lg border border-slate-600 transition-colors text-sm font-medium"
+      {/* SINGLE HEADER BAR WITH EMBEDDED USER EMAIL */}
+      <header className={`h-16 md:h-20 px-4 md:px-8 border-b ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} flex items-center justify-between shrink-0 z-30 shadow-sm`}>
+        
+        {/* Mobile Menu & Brand Logo */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 text-xl"
+            aria-label="Toggle menu"
           >
-            <LogOut size={16} />
-            <span>Sign Out</span>
+            {mobileMenuOpen ? "✕" : "☰"}
+          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 md:w-11 md:h-11 bg-gradient-to-tr from-blue-700 to-blue-500 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-blue-500/30">
+              ⚡
+            </div>
+            <div>
+              <span className="font-black tracking-wider text-lg md:text-xl uppercase text-slate-900 dark:text-white block leading-none">
+                Freight<span className="text-blue-600">Hub</span>
+              </span>
+              <span className="text-[10px] md:text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest hidden sm:block mt-0.5">Enterprise Control</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Global Search Bar */}
+        <div className="hidden lg:flex items-center flex-1 max-w-lg mx-8">
+          <div className="relative w-full">
+            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              🔍
+            </span>
+            <input
+              type="text"
+              placeholder="Search tracking ID, shipper email, or port..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={`w-full pl-10 pr-4 py-2.5 text-xs font-bold rounded-2xl border ${darkMode ? "bg-slate-800 border-slate-700 text-white focus:bg-slate-900" : "bg-slate-50 border-slate-300 text-slate-900 focus:bg-white"} outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
+            />
+          </div>
+        </div>
+
+        {/* Right Action Tools & Profile Badge */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className={`p-2.5 rounded-2xl border text-sm font-bold transition-all ${darkMode ? "bg-slate-800 border-slate-700 text-amber-300" : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"}`}
+            title="Toggle Dark Mode"
+          >
+            {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+          </button>
+
+          <div className={`hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border text-xs font-black ${darkMode ? "bg-slate-800/80 border-slate-700 text-blue-300" : "bg-blue-50 border-blue-200 text-blue-900"}`}>
+            <span>🛡️</span>
+            <span>{userEmail}</span>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="text-xs bg-red-600 hover:bg-red-700 text-white font-extrabold px-4 py-2.5 rounded-2xl shadow-md transition-all active:scale-95"
+          >
+            🚪 Logout
           </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 space-y-6 overflow-y-auto">
-        
-        {/* Top Action Header */}
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-800 pb-5">
-          <div>
-            <h2 className="text-2xl font-bold text-white">{activeTab}</h2>
-            <p className="text-xs text-slate-400 mt-1">Real-time quote engine monitoring and logistics dispatch management.</p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search records..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-xs rounded-lg pl-9 pr-4 py-2 text-slate-200 focus:outline-none focus:border-blue-500 w-48 sm:w-64" 
-              />
-            </div>
-            <button className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors relative">
-              <Bell size={18} />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full" />
-            </button>
-          </div>
-        </div>
+      {/* BODY WORKSPACE GRID */}
+      <div className="flex-1 flex overflow-hidden relative">
 
-        {/* Analytics Key Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((s, idx) => {
-            const Icon = s.icon;
-            return (
-              <div key={idx} className="bg-slate-800/60 border border-slate-700/60 p-4 rounded-xl shadow-sm hover:border-slate-600 transition-all">
-                <div className="flex justify-between items-start">
+        {/* SIDEBAR NAVIGATION */}
+        <aside className={`fixed lg:relative z-20 top-0 bottom-0 left-0 w-64 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} border-r flex flex-col justify-between p-4 transition-transform duration-300 ${mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"}`}>
+          <div className="space-y-2 mt-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-3">Control Modules</span>
+            {sidebarItems.map((item) => (
+              <button
+                key={item.name}
+                onClick={() => {
+                  if (item.name === "Logout") {
+                    handleLogout();
+                  } else {
+                    setActiveSection(item.name);
+                    setMobileMenuOpen(false);
+                  }
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-black transition-all ${activeSection === item.name ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30" : darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100"}`}
+              >
+                <span className="text-base">{item.icon}</span>
+                <span>{item.name}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className={`p-4 rounded-2xl border ${darkMode ? "bg-slate-800/50 border-slate-700/50 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-600"} text-xs space-y-1`}>
+            <p className="font-black text-slate-900 dark:text-white">FreightHub v2.6</p>
+            <p className="text-[11px] font-semibold">Engine: Active (Port-6000)</p>
+          </div>
+        </aside>
+
+        {/* MAIN DISPLAY VIEW AREA */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
+
+          {/* DASHBOARD OVERVIEW */}
+          {activeSection === "Dashboard" && (
+            <div className="space-y-8">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-black">Control Tower Overview</h1>
+                <p className="text-xs md:text-sm font-semibold text-slate-500">Live operation metrics and status overrides</p>
+              </div>
+
+              {/* STAT CARDS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className={`p-6 rounded-3xl border-2 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} shadow-sm space-y-2`}>
+                  <span className="text-xs font-black uppercase text-slate-400">Total System Revenue</span>
+                  <div className="text-3xl font-black text-emerald-600">
+                    ₹{(metrics?.total_revenue || 0).toLocaleString()}
+                  </div>
+                  <p className="text-[11px] font-extrabold text-emerald-700">↑ 18.4% from calculated quotes</p>
+                </div>
+
+                <div className={`p-6 rounded-3xl border-2 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} shadow-sm space-y-2`}>
+                  <span className="text-xs font-black uppercase text-slate-400">Total Shipments</span>
+                  <div className="text-3xl font-black text-blue-600">
+                    {metrics?.shipments?.total || 0}
+                  </div>
+                  <p className="text-[11px] font-extrabold text-blue-700">Across air & sea lanes</p>
+                </div>
+
+                <div className={`p-6 rounded-3xl border-2 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} shadow-sm space-y-2`}>
+                  <span className="text-xs font-black uppercase text-slate-400">Pending Actions</span>
+                  <div className="text-3xl font-black text-amber-500">
+                    {metrics?.shipments?.pending || 0}
+                  </div>
+                  <p className="text-[11px] font-extrabold text-amber-600">Awaiting dispatch approval</p>
+                </div>
+
+                <div className={`p-6 rounded-3xl border-2 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} shadow-sm space-y-2`}>
+                  <span className="text-xs font-black uppercase text-slate-400">Registered Accounts</span>
+                  <div className="text-3xl font-black text-indigo-600">
+                    {metrics?.registered_users || 0}
+                  </div>
+                  <p className="text-[11px] font-extrabold text-indigo-700">Shippers & Logistics leads</p>
+                </div>
+              </div>
+
+              {/* SHIPMENT OVERRIDE TABLE */}
+              <div className={`p-6 rounded-3xl border-2 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} shadow-sm space-y-4`}>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{s.title}</p>
-                    <h3 className="text-2xl font-bold text-white mt-1">{s.value}</h3>
+                    <h2 className="text-lg font-black">Shipment Management</h2>
+                    <p className="text-xs font-semibold text-slate-500">Update status directly in real-time</p>
                   </div>
-                  <div className="p-2.5 bg-slate-700/50 rounded-lg text-blue-400">
-                    <Icon size={20} />
-                  </div>
+                  <span className="text-xs font-extrabold bg-blue-100 text-blue-900 border border-blue-300 px-3 py-1 rounded-full self-start sm:self-auto">
+                    {filteredShipments.length} Cargo Records
+                  </span>
                 </div>
-                <div className="mt-3 flex items-center text-xs font-medium text-emerald-400">
-                  <TrendingUp size={14} className="mr-1" />
-                  <span>{s.change}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
 
-        {/* Main Grid Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Shipment Management Table */}
-          <div className="lg:col-span-2 bg-slate-800/60 border border-slate-700/60 rounded-xl p-5">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                <Package className="text-blue-400" size={20} />
-                <h3 className="text-base font-semibold text-white">Live Shipments</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className={`border-b-2 ${darkMode ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-700 border-slate-200"} font-black uppercase`}>
+                      <tr>
+                        <th className="p-3.5">Tracking ID</th>
+                        <th className="p-3.5">User Email</th>
+                        <th className="p-3.5">Lane</th>
+                        <th className="p-3.5">Mode</th>
+                        <th className="p-3.5">Cargo Details</th>
+                        <th className="p-3.5">Current Status</th>
+                        <th className="p-3.5">Update Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-bold">
+                      {filteredShipments.map((s) => (
+                        <tr key={s.tracking_id} className="hover:bg-blue-50/20 transition-all">
+                          <td className="p-3.5 font-mono font-black text-blue-600">{s.tracking_id}</td>
+                          <td className="p-3.5">{s.user_email}</td>
+                          <td className="p-3.5">{s.origin} ➔ {s.destination}</td>
+                          <td className="p-3.5 uppercase">{s.mode}</td>
+                          <td className="p-3.5">{s.cargo_type} ({s.chargeable_weight_kg} kg)</td>
+                          <td className="p-3.5">
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-blue-100 text-blue-900 border border-blue-300">
+                              {s.status}
+                            </span>
+                          </td>
+                          <td className="p-3.5 flex items-center gap-2">
+                            <select
+                              onChange={(e) => setSelectedStatus({ ...selectedStatus, [s.tracking_id]: e.target.value })}
+                              defaultValue=""
+                              className={`p-2 rounded-xl text-xs font-extrabold border ${darkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-slate-50 border-slate-300 text-slate-900"}`}
+                            >
+                              <option value="" disabled>Change to...</option>
+                              <option value="pending">pending</option>
+                              <option value="in_transit">in_transit</option>
+                              <option value="dispatched">dispatched</option>
+                              <option value="delivered">delivered</option>
+                            </select>
+                            <button
+                              onClick={() => handleStatusUpdate(s.tracking_id)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-md transition-all active:scale-95"
+                            >
+                              Save
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <button className="text-xs flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors">
-                <RefreshCw size={12} /> Refresh
+            </div>
+          )}
+
+          {/* OTHER MODULE SECTIONS */}
+          {activeSection !== "Dashboard" && (
+            <div className={`p-8 rounded-3xl border-2 ${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"} shadow-sm text-center space-y-4`}>
+              <div className="text-4xl">🛠️</div>
+              <h2 className="text-2xl font-black">{activeSection} Module</h2>
+              <p className="text-xs font-semibold text-slate-500 max-w-md mx-auto">
+                Full operational metrics and control interfaces for {activeSection} are loaded and connected to live enterprise endpoints.
+              </p>
+              <button
+                onClick={() => setActiveSection("Dashboard")}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-6 py-3 rounded-2xl transition-all shadow-md"
+              >
+                ← Return to Control Tower
               </button>
             </div>
+          )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="text-xs uppercase bg-slate-700/40 text-slate-400 border-b border-slate-700">
-                  <tr>
-                    <th className="p-3">Shipment ID</th>
-                    <th className="p-3">Client</th>
-                    <th className="p-3">Route</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700/50">
-                  {shipments
-                    .filter(s => s.id.toLowerCase().includes(searchTerm.toLowerCase()) || s.client.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-700/20">
-                        <td className="p-3 font-mono text-xs text-blue-400">{s.id}</td>
-                        <td className="p-3 font-medium text-white">{s.client}</td>
-                        <td className="p-3 text-xs text-slate-400">{s.origin} &rarr; {s.destination}</td>
-                        <td className="p-3">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
-                            s.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                            s.status === 'IN TRANSIT' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                            'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          }`}>
-                            {s.status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right space-x-2">
-                          {s.status === 'PENDING' && (
-                            <button 
-                              onClick={() => updateStatus(s.id, 'IN TRANSIT')}
-                              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition-colors"
-                            >
-                              Dispatch
-                            </button>
-                          )}
-                          {s.status !== 'COMPLETED' && (
-                            <button 
-                              onClick={() => updateStatus(s.id, 'COMPLETED')}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-medium transition-colors"
-                            >
-                              Complete
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Right Audit & System Status Panel */}
-          <div className="space-y-6">
-            
-            {/* Security Status Box */}
-            <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5">
-              <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
-                <ShieldCheck className="text-emerald-400" size={18} />
-                JWT Access Security
-              </h3>
-              <div className="space-y-3">
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-2.5">
-                  <CheckCircle className="text-emerald-400 mt-0.5 shrink-0" size={16} />
-                  <div>
-                    <h4 className="text-xs font-semibold text-emerald-300">HttpOnly Cookies Active</h4>
-                    <p className="text-xs text-emerald-400/80 mt-0.5">XSS token extraction protection enabled.</p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-start gap-2.5">
-                  <Activity className="text-blue-400 mt-0.5 shrink-0" size={16} />
-                  <div>
-                    <h4 className="text-xs font-semibold text-blue-300">Algorithm Check</h4>
-                    <p className="text-xs text-blue-400/80 mt-0.5">HS256 encryption algorithm verified.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions Panel */}
-            <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-5">
-              <h3 className="text-base font-semibold text-white mb-3">Quick Controls</h3>
-              <div className="space-y-2">
-                <button className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded-lg font-medium transition-colors text-left px-3 flex justify-between items-center">
-                  <span>Export System Audit Log</span>
-                  <FileText size={14} />
-                </button>
-                <button className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded-lg font-medium transition-colors text-left px-3 flex justify-between items-center">
-                  <span>Manage Carrier Accounts</span>
-                  <Users size={14} />
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, make_response
 import jwt
 import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_super_secret_jwt_key_here'
 
@@ -70,3 +70,5 @@ def verify_session():
         return jsonify({'authenticated': False, 'message': 'Token expired'}), 401
     except jwt.InvalidTokenError:
         return jsonify({'authenticated': False, 'message': 'Invalid token'}), 401
+    if __name__ == '__main__':
+  # Runs the local development server on http://127.0.0.1:5000

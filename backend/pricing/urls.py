@@ -1,5 +1,6 @@
 from django.urls import path
+from . import views
 
 urlpatterns = [
-    # API endpoints for this module will go here
+    path('calculate-freight/', views.calculate_freight, name='calculate_freight'),
 ]
