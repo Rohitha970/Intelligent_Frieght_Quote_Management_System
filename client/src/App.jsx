@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import AdminDashboard from "./components/AdminDashboard";
 
-const API_BASE = "https://intelligent-frieght-quote-generator-3huz.onrender.com";
+const API_BASE = "https://intelligent-frieght-quote-generator-3huz.onrender.com/api";
 
 const INITIAL_SERVICES_FORM = {
   // Step 1: Route
