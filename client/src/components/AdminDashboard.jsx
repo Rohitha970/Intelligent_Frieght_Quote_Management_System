@@ -107,7 +107,7 @@ export default function AdminDashboard({ token, handleLogout, userEmail = "admin
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 md:w-11 md:h-11 bg-gradient-to-tr from-blue-700 to-blue-500 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-blue-500/30">
+            <div className="w-10 h-10 md:w-11 md:h-11 bg-linear-to-tr from-blue-700 to-blue-500 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-blue-500/30">
               ⚡
             </div>
             <div>
