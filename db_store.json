@@ -1,0 +1,89 @@
+{
+  "users": [
+    {
+      "username": "admin@freighthub.in",
+      "email": "admin@freighthub.in",
+      "role": "admin",
+      "password": "admin"
+    },
+    {
+      "username": "shipper@client.com",
+      "email": "shipper@client.com",
+      "role": "user",
+      "password": "user"
+    },
+    {
+      "username": "user@example.com",
+      "email": "user@example.com",
+      "role": "user",
+      "password": "pass123"
+    },
+    {
+      "username": "shipper@client.commail.com",
+      "email": "shipper@client.commail.com",
+      "role": "user",
+      "password": "123456"
+    }
+  ],
+  "shipments": [
+    {
+      "tracking_id": "FH-99201",
+      "shipment_id": "FH-99201",
+      "user_email": "shipper@client.com",
+      "origin": "INNSA (Mumbai)",
+      "destination": "AEJEA (Dubai)",
+      "mode": "ocean",
+      "cargo_type": "Textiles",
+      "chargeable_weight_kg": 18400,
+      "status": "in_transit"
+    },
+    {
+      "tracking_id": "FH-99202",
+      "shipment_id": "FH-99202",
+      "user_email": "global@supply.com",
+      "origin": "BOM (Mumbai)",
+      "destination": "DXB (Dubai)",
+      "mode": "air",
+      "cargo_type": "Electronics",
+      "chargeable_weight_kg": 850,
+      "status": "pending"
+    },
+    {
+      "tracking_id": "FH-99203",
+      "shipment_id": "FH-99203",
+      "user_email": "logistics@hub.com",
+      "origin": "INNSA (Mumbai)",
+      "destination": "NLRTM (Rotterdam)",
+      "mode": "ocean",
+      "cargo_type": "Machinery",
+      "chargeable_weight_kg": 24000,
+      "status": "dispatched"
+    }
+  ],
+  "quotes": [
+    {
+      "quote_id": "QT-OCEAN-539511",
+      "estimated_price": 221410,
+      "currency": "INR",
+      "breakdown": {
+        "base_freight": 219250,
+        "fuel_surcharge": 2160,
+        "total_price": 221410
+      },
+      "mode": "ocean",
+      "created_at": "2026-08-10T18:05:35.341Z"
+    },
+    {
+      "quote_id": "QT-OCEAN-501279",
+      "estimated_price": 221410,
+      "currency": "INR",
+      "breakdown": {
+        "base_freight": 219250,
+        "fuel_surcharge": 2160,
+        "total_price": 221410
+      },
+      "mode": "ocean",
+      "created_at": "2026-08-10T17:54:05.885Z"
+    }
+  ]
+}
