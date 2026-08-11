@@ -345,7 +345,7 @@ export default function App() {
       }
     } catch (err) {
       setAuthError(err.message);
-    } fontally {
+    } finally {
       setAuthLoading(false);
     }
   };
