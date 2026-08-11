@@ -11,7 +11,7 @@ urlpatterns = [
     
     
     # Matching React endpoint base paths
-    path('api/', include('authentication.urls')),
-    path('api/admin-panel/', include('admin_panel.urls')),
-    path('api/', include('pricing.urls')),
+    path('', include('authentication.urls')),
+    path('admin-panel/', include('admin_panel.urls')),
+    path('', include('pricing.urls')),
 ]
